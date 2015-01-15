@@ -150,7 +150,7 @@ int main()
 		pid=fork();
 		if(pid==0)//child process rec and send
 		{
-			close(sockfd);
+			
 			int i=0,count,res;
 			char cmd[100],flg[100],arg[100];
 			char user[200],pass[200];
