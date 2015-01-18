@@ -14,7 +14,7 @@
 #define MAXSZ 1024
 
 
-int search(char file[100]) // 
+int search(char file[100]) // to check if user have required permissions on file
 {
 
 	DIR *fd=opendir(".");
@@ -66,10 +66,11 @@ int main(int argc, char *argv[])
 		perror("Error");
 		exit(0);
 	}
-
+//user authentication
+//user must be added on the server side
 	printf("Username:");
 	scanf("%s",usr);
-	pass=getpass("Please enter the password: ");
+	pass=getpass("Please enter the password: ");//to hide password
 	send(sockfd,usr,strlen(usr)+1,0);
 	send(sockfd,pass,strlen(pass)+1,0);
 	bzero(msg1,sizeof(msg1));
@@ -118,7 +119,7 @@ int main(int argc, char *argv[])
 					send(sockfd,msg1,n,0);
 					recv(sockfd,msg2,MAXSZ,0);
 	
-					if(strcmp(msg2,"found")==0)
+					if(strcmp(msg2,"found")==0)//file is present on server side and you have required permissions
 					{
 						recv(sockfd, &size, sizeof(long long int), 0);
 						char *f = malloc(size);
@@ -140,7 +141,7 @@ int main(int argc, char *argv[])
 						close(filehandle);
 	
 					}
-					else
+					else//either file is not present ot you don't have required permissions
 					{
 						printf("%s\n",msg2);
 						memset(msg2,0,sizeof(msg2));
@@ -149,7 +150,7 @@ int main(int argc, char *argv[])
 				}
 				else if(strcmp(cmd,"put")==0)
 				{
-					int res=search(flg);
+					int res=search(flg);//to check if user has required permissions on file
 					if(res==0)
 					{
 						printf("Permission Denied");
