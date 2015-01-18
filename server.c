@@ -18,22 +18,6 @@ char out[100];
 #define PORT 8000
 #define MAXSZ 1024
 
-void func_to_separate(char *msg, char **arg)
-{
-	while(*msg!='\0')
-	{
-		while(*msg == ' ' || *msg == '\t' || *msg == '\n')
-		{
-			*msg++='\0';
-		}
-		*arg++=msg;
-		
-		while(*msg!='\0' && *msg != ' ' && *msg != '\t' && *msg != '\n')
-			msg++;
-	}
-	*arg='\0';
-}
-
 int sys_auth_user(const char *username, const char *password)
 {
 	struct passwd *pw;
@@ -43,7 +27,8 @@ int sys_auth_user(const char *username, const char *password)
 	pw = getpwnam(username);
 	endpwent();
 
-	if (!pw) return 1; //user doesn't really exist
+	if (!pw) 
+		return 1; //user doesn't exist
 
 	sp = getspnam (pw->pw_name);
 	endspent();
@@ -53,11 +38,11 @@ int sys_auth_user(const char *username, const char *password)
 		correct = pw->pw_passwd;
 
 	encrypted = crypt(password, correct);
-	return strcmp (encrypted, correct) ? 2 : 0;  // bad pw=2, success=0
+	return strcmp (encrypted, correct) ? 2 : 0;  // 2=user exists but wrong password, success=0
 }
 
 
-int search2(char fil[100])
+int search2(char fil[100])// to check if entered directory name is valid and user have permissions 
 { 
 	bzero(out,sizeof(out));
 	if(access(fil,F_OK)==0)
@@ -90,7 +75,7 @@ int search2(char fil[100])
 	}
 }
 
-int search1(char fil[100])
+int search1(char fil[100])//to check if file is regular or not
 { 
 	bzero(out,sizeof(out));
 	if(access(fil,F_OK)==0)
@@ -191,7 +176,7 @@ int main()
 				}
 				else if(strcmp(cmd,"ls")==0)
 				{
-					strcat(msg, "/tmp/new.txt");
+					strcat(msg, " /tmp/new.txt");
 					long long int num;
 					system(msg);
 				
@@ -208,7 +193,7 @@ int main()
 				}
 				else if(strcmp(cmd,"cd")==0)
 				{
-					res=search2(flg);
+					res=search2(flg); //to check if directory is present and accessible
 					if(res!=1)
 					{
 						send(newsockfd,out,strlen(out),0);
@@ -225,7 +210,7 @@ int main()
 					bzero(content,sizeof(content));
 					char found[]="found";
 				
-					res=search1(flg);
+					res=search1(flg);//to check if file is present
   
 					if(res==1)
 					{
@@ -258,7 +243,7 @@ int main()
 					char *f;
 					recv(newsockfd, &size, sizeof(int), 0);
 					i = 1;
-					while(1)
+					while(1)//if file is already present
 					{
 						filehandle = open(flg, O_CREAT | O_EXCL | O_WRONLY, 0666);
 						if(filehandle == -1)
