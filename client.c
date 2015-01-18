@@ -4,9 +4,9 @@
 #include<string.h>//memset
 #include<stdlib.h>//sizeof
 #include<netinet/in.h>//INADDR_ANY
-#include<dirent.h> 
-#include<sys/stat.h>
-#include<fcntl.h>
+#include<dirent.h> // DIR
+#include<sys/stat.h>//stat
+#include<fcntl.h>//open close
 #include<unistd.h>
 
 
@@ -14,7 +14,7 @@
 #define MAXSZ 1024
 
 
-int search(char file[100])
+int search(char file[100]) // 
 {
 
 	DIR *fd=opendir(".");
@@ -26,9 +26,9 @@ int search(char file[100])
 			struct stat buff;
 			stat(file,&buff);
 			if(S_ISREG(buff.st_mode))
-			return 1;
-        else
-			return 0;
+				return 1;
+        		else
+				return 0;
 		}
 		entry=readdir(fd);
 	}
@@ -104,7 +104,7 @@ int main(int argc, char *argv[])
 			{
 				printf("Closing FTP!!!\n");
 				close(sockfd); 
-				exit(1);
+				exit(0);
 			}
 			else
 			{
@@ -149,6 +149,12 @@ int main(int argc, char *argv[])
 				}
 				else if(strcmp(cmd,"put")==0)
 				{
+					int res=search(flg);
+					if(res==0)
+					{
+						printf("Permission Denied");
+						exit(0);
+					}
 					filehandle = open(flg, O_RDONLY);
 					if(filehandle == -1)
 					{
