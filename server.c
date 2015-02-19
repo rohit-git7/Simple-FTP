@@ -50,7 +50,7 @@ int search2(char fil[100])
 	bzero(out,sizeof(out));
 	
 	if(access(fil,F_OK)==0)
-    {
+    	{
 		if(access(fil,R_OK)==0)
 		{
 			struct stat buf;
@@ -70,7 +70,7 @@ int search2(char fil[100])
 			strcpy(out,strerror(errno));
 			return 0;
 		}
-    }
+	}
 	else
 	{ 
 		strcpy(out,strerror(errno));
@@ -85,7 +85,7 @@ int search1(char fil[100])
 	bzero(out,sizeof(out));
 
 	if(access(fil,F_OK)==0)
-    {
+    	{
 		if(access(fil,R_OK)==0)
 		{
 			struct stat buf;
@@ -106,7 +106,7 @@ int search1(char fil[100])
 			strcpy(out,strerror(errno));
 			return 0;
 		}
-    }
+    	}
 	else
 	{ 
 		strcpy(out,strerror(errno));
@@ -277,7 +277,7 @@ int main()
 							lseek(filehandle,0,0);
 							while(size > 0)
 							{
-								n=read(filehandle,content,1024);
+								n = read(filehandle,content,1024);
 								total = 0;
 								while(total < n)
 								{
