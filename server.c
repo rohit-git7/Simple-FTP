@@ -4,47 +4,51 @@
 #include<string.h>//memset strcmp
 #include<stdlib.h>//sizeof exit
 #include<netinet/in.h>//INADDR_ANY
+#include<arpa/inet.h>
 #include<ctype.h> //isspace
 #include<dirent.h> // for parsing directory
 #include<unistd.h> //for access R_OK
 #include<errno.h>
 #include<sys/stat.h> //stat
 #include<fcntl.h> //O_RDONLY
-
+#include<sys/sendfile.h>
 #include<pwd.h> //user authentication
 #include<shadow.h>
+#include<crypt.h>
 
-char out[100];
 #define PORT 8000
 #define MAXSZ 1024
 
+char out[MAXSZ];
+
 int sys_auth_user(const char *username, const char *password)
 {
-	struct passwd *pw;
-	struct spwd *sp;
-	char *encrypted, *correct;
+  struct passwd *pw;
+  struct spwd *sp;
+  char *encrypted, *correct;
 
-	pw = getpwnam(username);
-	endpwent();
+  pw = getpwnam(username);
+  endpwent();
 
-	if (!pw) 
-		return 1; //user doesn't exist
+  if (!pw) 
+	return 1; //user doesn't really exist
 
-	sp = getspnam (pw->pw_name);
-	endspent();
-	if(sp)
-		correct = sp->sp_pwdp;
-	else
-		correct = pw->pw_passwd;
+  sp = getspnam (pw->pw_name);
+  endspent();
+  if(sp)
+     correct = sp->sp_pwdp;
+  else
+     correct = pw->pw_passwd;
 
-	encrypted = crypt(password, correct);
-	return strcmp (encrypted, correct) ? 2 : 0;  // 2=user exists but wrong password, success=0
+  encrypted = crypt(password, correct);
+  return strcmp (encrypted, correct) ? 2 : 0;  // bad password=2, success=0
 }
 
 
-int search2(char fil[100])// to check if entered directory name is valid and user have permissions 
+int search2(char fil[100])
 { 
 	bzero(out,sizeof(out));
+	
 	if(access(fil,F_OK)==0)
     {
 		if(access(fil,R_OK)==0)
@@ -59,7 +63,6 @@ int search2(char fil[100])// to check if entered directory name is valid and use
 			{
 				strcpy(out,"Not a directory");
 				return -1;
-     	
 			}
 		}
 		else
@@ -75,15 +78,19 @@ int search2(char fil[100])// to check if entered directory name is valid and use
 	}
 }
 
-int search1(char fil[100])//to check if file is regular or not
+
+
+int search1(char fil[100])
 { 
 	bzero(out,sizeof(out));
+
 	if(access(fil,F_OK)==0)
-	{
+    {
 		if(access(fil,R_OK)==0)
 		{
 			struct stat buf;
 			stat(fil,&buf);
+	
 			if(S_ISREG(buf.st_mode))
 			{
 				return 1;
@@ -91,7 +98,7 @@ int search1(char fil[100])//to check if file is regular or not
 			else
 			{
 				strcpy(out,"Not a regular file");
-				return -1;
+				return -1;	
 			}
 		}
 		else
@@ -118,172 +125,226 @@ int main()
 
 	int n;
 	char msg[MAXSZ];
-	int clientAddressLength;
-	int pid,status;
+	socklen_t clientAddressLength;
+	int pid;
+	int yes = 1;
+	int i = 0;
+	int count;
+	int res;
+	int auth;
+	int filehandle;
+	int total;
+	int c = 0;
+	int size;
+	
+	long int p;
+	long long int num;
+	long int size;
+	
+	char cmd[MAXSZ];
+	char flg[MAXSZ];
+	char user[MAXSZ];
+	char pass[MAXSZ];
+	char curr_dir[MAXSZ];
+	char content[MAXSZ];
+	char found[MAXSZ];
+	char size_buff[MAXSZ];
+						
+	char fail[]="Authentication failure";
+	char success[]="true";
+	char def[]="Directory changed";
+	
+	char *f;
 
-//create socket
+	struct stat obj;
+	struct stat tem;
+	
+	//create socket
 	sockfd=socket(AF_INET,SOCK_STREAM,0);
-//initialize the socket addresses
+	if(sockfd == -1)
+	{
+		perror("Error");
+		exit(1);
+	}
+	
+	//initialize the socket addresses
 	bzero(&serverAddress,sizeof(serverAddress));
 	serverAddress.sin_family=AF_INET;
 	serverAddress.sin_addr.s_addr=htonl(INADDR_ANY);
 	serverAddress.sin_port=htons(PORT);
 
-//bind the socket with the server address and port
+	setsockopt(sockfd,SOL_SOCKET,SO_REUSEADDR,&yes,sizeof(int));
+
+	//bind the socket with the server address and port
 	bind(sockfd,(struct sockaddr *)&serverAddress, sizeof(serverAddress));
 
-//listen for connection from client
+	//listen for connection from client
 	listen(sockfd,5);
 
 	while(1)
 	{
-//parent process waiting to accept a new connection
+		//parent process waiting to accept a new connection
 		printf("\nWaiting for new client connection:\n");
-		clientAddressLength=sizeof(clientAddress);
-		newsockfd=accept(sockfd,(struct sockaddr*)&clientAddress,&clientAddressLength);
+		clientAddressLength = sizeof(clientAddress);
+		newsockfd = accept(sockfd,(struct sockaddr*)&clientAddress,&clientAddressLength);
+		printf("Connected to client: %s\n",inet_ntoa(clientAddress.sin_addr));
 
-//child process is created for serving each new clients
-		pid=fork();
-		if(pid==0)//child process rec and send
+		//child process is created for serving each new clients
+		pid = fork();
+		if(pid == 0)//child process rec and send
 		{
-			int i=0,count,res;
-			char cmd[100],flg[100],arg[100];
-			char user[200],pass[200];
-		
-			n=recv(newsockfd,user,200,0);
-			n=recv(newsockfd,pass,200,0);
+			close(sockfd);
 
-			int auth=sys_auth_user(user,pass);
-			if(auth==0)
+			n = recv(newsockfd,user,sizeof(user),0);
+			n = recv(newsockfd,pass,sizeof(pass),0);
+
+			auth = sys_auth_user(user,pass);
+
+			if(auth == 0)
 			{
-				char success[]="true";
-				n=strlen(success)+1;
+				
+				n = strlen(success)+1;
 				send(newsockfd,success,n,0);
 
-//receive from client
-			while(1)
-			{
-				count=0;
-				n=recv(newsockfd,msg,MAXSZ,0);
-
-				count=sscanf(msg,"%s %s %s",cmd,flg,arg);
-
-				if(strcmp(cmd,"pwd")==0)
+				//receive from client
+				while(1)
 				{
-					char curr_dir[1024];
-					getcwd(curr_dir,sizeof(curr_dir));
-					send(newsockfd,curr_dir,strlen(curr_dir),0);
-				}
-				else if(strcmp(cmd,"ls")==0)
-				{
-					strcat(msg, " /tmp/new.txt");
-					long long int num;
-					system(msg);
-				
-					int fd=open("/tmp/new.txt",O_RDONLY);
-					struct stat tem;
-					fstat(fd,&tem);
-					num=tem.st_size;	
-					send(newsockfd, &num, sizeof(long long int), 0);
-    
-					if(num)
-						sendfile(newsockfd,fd, NULL,num);
-					close(fd);
+					n = recv(newsockfd,msg,MAXSZ,0);
+					msg[n] = '\0';
 
-				}
-				else if(strcmp(cmd,"cd")==0)
-				{
-					res=search2(flg); //to check if directory is present and accessible
-					if(res!=1)
+					if(msg[strlen(msg)-1] == '\r')
+						msg[strlen(msg)-1] = '\0';
+						
+					if(msg[strlen(msg)-1] == '\n')
+						msg[strlen(msg)-1] = '\0';
+
+					sscanf(msg,"%s %s",cmd,flg);
+
+					if(strcmp(cmd,"pwd") == 0)
 					{
-						send(newsockfd,out,strlen(out),0);
+						getcwd(curr_dir,sizeof(curr_dir));
+						send(newsockfd,curr_dir,strlen(curr_dir),0);
 					}
-					else
+					else if(strcmp(cmd,"ls") == 0)
 					{
-						chdir(flg);
-						send(newsockfd,"Done",4,0);
-					}
-				}
-				else if(strcmp(cmd,"get")==0)
-				{
-					char content[1024],size[1024];
-					bzero(content,sizeof(content));
-					char found[]="found";
-				
-					res=search1(flg);//to check if file is present
-  
-					if(res==1)
-					{
-						send(newsockfd,found,strlen(found),0); 
-	
-						long long int size;
-						struct stat obj;
-						stat(flg,&obj);
-						int filehandle = open(flg, O_RDONLY);
-						size = obj.st_size;
-			
-						if(filehandle == -1)
-							size = 0;
- 	
-						send(newsockfd, &size, sizeof(long long int), 0);
-						if(size)
-							sendfile(newsockfd, filehandle, NULL, size);
-	
+						system("ls > /tmp/new.txt");
+						filehandle = open("/tmp/new.txt",O_RDONLY);
+						
+						fstat(filehandle,&tem);
+						num = tem.st_size;	
+						send(newsockfd, &num, sizeof(long long int), 0);
+						
+						if(num)
+							sendfile(newsockfd,filehandle, NULL,num);
+						
 						close(filehandle);
 					}
-					else
+					else if(strcmp(cmd,"cd") == 0)
 					{
-						send(newsockfd,out,strlen(out),0); 
-					}
-	
-				}
-				else if(strcmp(cmd,"put")==0)
-				{
-					int c = 0, len,filehandle,size;
-					char *f;
-					recv(newsockfd, &size, sizeof(int), 0);
-					i = 1;
-					while(1)//if file is already present
-					{
-						filehandle = open(flg, O_CREAT | O_EXCL | O_WRONLY, 0666);
-						if(filehandle == -1)
+						res = search2(flg);
+						if(res != 1)
 						{
-							sprintf(strlen(flg)+flg, "%d", i);
+							send(newsockfd,out,strlen(out),0);
 						}
 						else
-							break;
+						{
+							chdir(flg);
+							send(newsockfd,def,strlen(def),0);
+						}
 					}
-					f = malloc(size);
-					recv(newsockfd, f, size, 0);
-					c = write(filehandle, f, size);
-					close(filehandle);
-					send(newsockfd, &c, sizeof(int), 0);
+					else if(strcmp(cmd,"get") == 0)
+					{
+						bzero(content,sizeof(content));
+						strcpy(found,"found");
+						res = search1(flg);
 
-				}
-				else
-				{
-					msg[n]='\0';
-					send(newsockfd,msg,n,0);
-				}
+						if(res == 1)
+						{
+							p = 0;
+							send(newsockfd,found,strlen(found)+1,0); 
+							
+							filehandle = open(flg,O_RDONLY);
+							fstat(filehandle,&obj);
+							size = (long)obj.st_size;
+							
+							if(filehandle == -1)
+								size = 0;
+
+							sprintf(size_buff,"%ld",size);
+	
+							send(newsockfd, size_buff, strlen(size_buff), 0);
+ 	
+							lseek(filehandle,0,0);
+							while(size > 0)
+							{
+								n=read(filehandle,content,1024);
+								total = 0;
+								while(total < n)
+								{
+									p = send(newsockfd,content + total,n - total,0);
+									total += p;
+								}
+								
+								bzero(content,sizeof(content));
+								size -= n;	
+		
+							}
+
+						close(filehandle);
+						}
+						else
+						{
+							send(newsockfd,out,strlen(out),0); 
+						}
+	
+					}
+					else if(strcmp(cmd,"put") == 0)
+					{
+						c = 0;
+						recv(newsockfd, &size, sizeof(int), 0);
+						i = 1;
+						
+						while(1)
+						{
+							filehandle = open(flg, O_CREAT | O_EXCL | O_WRONLY, 0666);
+			
+							if(filehandle == -1)
+							{
+								sprintf(flg + strlen(flg), "%d", i);
+							}
+							else
+								break;
+						}
+						
+						f = malloc(size);
+						recv(newsockfd, f, size, 0);
+						c = write(filehandle, f, size);
+						
+						close(filehandle);
+						
+						send(newsockfd, &c, sizeof(int), 0);
+					}
+					else
+					{
+						msg[n]='\0';
+						send(newsockfd,msg,n,0);
+					}
 
 				}//close interior while
 				exit(0);
 			}
 			else
 			{
-				char fail[]="Authentication failure";
-				n=strlen(fail);
+				
+				n = strlen(fail);
 				send(newsockfd,fail,n,0);
 				close(newsockfd);
 			}
 		}
 		else
 		{
-			//wait(status);
 			close(newsockfd);//sock is closed BY PARENT
 		}
-	
 	}//close exterior while
-
-	return 0;
+return 0;
 }
