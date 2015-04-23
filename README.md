@@ -26,7 +26,7 @@ Following functions are included. For example:
 [1]: https://github.com/rohit-takhar/Multithreaded-ftp-client-in-C
                                                                                                                      
 To run:                                                                                                           
-Run command `make all` to compile program.                                                                              
-To execute, run `./myftp server-ip-address`.                                                                            
-Enter user credentials to login on server.                                                                                                                                           
+Run `server-executable` on one system and access through client, running on other system.                             
+Or you can use loopback address for using same system as client and server.          
+                                                                
 
